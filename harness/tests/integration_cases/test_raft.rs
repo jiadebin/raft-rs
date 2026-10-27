@@ -14,20 +14,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cmp;
-use std::collections::HashMap;
-use std::panic::{self, AssertUnwindSafe};
+use std::{
+    cmp,
+    collections::HashMap,
+    panic::{self, AssertUnwindSafe},
+};
 
 use harness::*;
-use raft::eraftpb::*;
-use raft::protocompat::*;
-use raft::storage::MemStorage;
-use raft::*;
+use raft::{eraftpb::*, protocompat::*, storage::MemStorage, *};
 use raft_proto::*;
 use slog::Logger;
 
-use crate::integration_cases::test_raft_paper::commit_noop_entry;
-use crate::test_util::*;
+use crate::{integration_cases::test_raft_paper::commit_noop_entry, test_util::*};
 
 type HashSet<K> = std::collections::HashSet<K, std::hash::BuildHasherDefault<fxhash::FxHasher>>;
 
@@ -197,20 +195,27 @@ fn test_progress_committed_index() {
     nt.dispatch(vec![new_message(2, 2, MessageType::MsgPropose, 1)])
         .expect("");
 
-    // [msg_type: MsgAppend to: 1 from: 2 term: 2 log_term: 2 index: 6 entries {term: 2 index: 7 data: "somedata"} commit: 4,
-    // msg_type: MsgAppend to: 3 from: 2 term: 2 log_term: 2 index: 6 entries {term: 2 index: 7 data: "somedata"} commit: 4]
+    // [msg_type: MsgAppend to: 1 from: 2 term: 2 log_term: 2 index: 6 entries
+    // {term: 2 index: 7 data: "somedata"} commit: 4, msg_type: MsgAppend to: 3
+    // from: 2 term: 2 log_term: 2 index: 6 entries {term: 2 index: 7 data:
+    // "somedata"} commit: 4]
     let msg_append = nt.read_messages();
 
     nt.dispatch(msg_append).expect("");
 
-    // [msg_type: MsgAppendResponse to: 2 from: 1 term: 2 index: 6 commit: 4 reject: true reject_hint: 4,
-    // msg_type: MsgAppendResponse to: 2 from: 3 term: 2 index: 6 commit: 4 reject: true reject_hint: 4]
+    // [msg_type: MsgAppendResponse to: 2 from: 1 term: 2 index: 6 commit: 4 reject:
+    // true reject_hint: 4, msg_type: MsgAppendResponse to: 2 from: 3 term: 2
+    // index: 6 commit: 4 reject: true reject_hint: 4]
     let msg_append_response = nt.read_messages();
 
     nt.dispatch(msg_append_response).expect("");
 
-    // [msg_type: MsgAppend to: 3 from: 2 term: 2 log_term: 2 index: 4 entries {term: 2 index: 5 data: "somedata"} entries {term: 2 index: 6 data: "somedata"} entries {term: 2 index: 7 data: "somedata"} commit: 4,
-    // msg_type: MsgAppend to: 1 from: 2 term: 2 log_term: 2 index: 4 entries {term: 2 index: 5 data: "somedata"} entries {term: 2 index: 6 data: "somedata"} entries {term: 2 index: 7 data: "somedata"} commit: 4]
+    // [msg_type: MsgAppend to: 3 from: 2 term: 2 log_term: 2 index: 4 entries
+    // {term: 2 index: 5 data: "somedata"} entries {term: 2 index: 6 data:
+    // "somedata"} entries {term: 2 index: 7 data: "somedata"} commit: 4,
+    // msg_type: MsgAppend to: 1 from: 2 term: 2 log_term: 2 index: 4 entries {term:
+    // 2 index: 5 data: "somedata"} entries {term: 2 index: 6 data: "somedata"}
+    // entries {term: 2 index: 7 data: "somedata"} commit: 4]
     let msg_append = nt.read_messages();
 
     // committed index remain the same
@@ -325,8 +330,8 @@ fn test_progress_leader() {
     }
 }
 
-// test_progress_resume_by_heartbeat_resp ensures raft.heartbeat reset progress.paused by
-// heartbeat response.
+// test_progress_resume_by_heartbeat_resp ensures raft.heartbeat reset
+// progress.paused by heartbeat response.
 #[test]
 fn test_progress_resume_by_heartbeat_resp() {
     let l = default_logger();
@@ -589,11 +594,11 @@ fn test_leader_election_overwrite_newer_logs_with_config(pre_vote: bool, l: &Log
     // This network represents the results of the following sequence of
     // events:
     // - Node 1 won the election in term 1.
-    // - Node 1 replicated a log entry to node 2 but died before sending
-    //   it to other nodes.
+    // - Node 1 replicated a log entry to node 2 but died before sending it to other
+    //   nodes.
     // - Node 3 won the second election in term 2.
-    // - Node 3 wrote an entry to its logs but died without sending it
-    //   to any other nodes.
+    // - Node 3 wrote an entry to its logs but died without sending it to any other
+    //   nodes.
     //
     // At this point, nodes 1, 2, and 3 all have uncommitted entries in
     // their logs and could win an election at term 3. The winner's log
@@ -605,11 +610,16 @@ fn test_leader_election_overwrite_newer_logs_with_config(pre_vote: bool, l: &Log
     config.pre_vote = pre_vote;
     let mut network = Network::new_with_config(
         vec![
-            Some(ents_with_config(&[1], pre_vote, 1, peers.clone(), l)), // Node 1: Won first election
-            Some(ents_with_config(&[1], pre_vote, 2, peers.clone(), l)), // Node 2: Get logs from node 1
-            Some(ents_with_config(&[2], pre_vote, 3, peers.clone(), l)), // Node 3: Won second election
-            Some(voted_with_config(3, 2, pre_vote, 4, peers.clone(), l)), // Node 4: Voted but didn't get logs
-            Some(voted_with_config(3, 2, pre_vote, 5, peers, l)), // Node 5: Voted but didn't get logs
+            Some(ents_with_config(&[1], pre_vote, 1, peers.clone(), l)), /* Node 1: Won first
+                                                                          * election */
+            Some(ents_with_config(&[1], pre_vote, 2, peers.clone(), l)), /* Node 2: Get logs
+                                                                          * from node 1 */
+            Some(ents_with_config(&[2], pre_vote, 3, peers.clone(), l)), /* Node 3: Won second
+                                                                          * election */
+            Some(voted_with_config(3, 2, pre_vote, 4, peers.clone(), l)), /* Node 4: Voted but
+                                                                           * didn't get logs */
+            Some(voted_with_config(3, 2, pre_vote, 5, peers, l)), /* Node 5: Voted but didn't
+                                                                   * get logs */
         ],
         &config,
         l,
@@ -822,9 +832,9 @@ fn test_single_node_commit() {
     assert_eq!(tt.peers[&1].raft_log.committed, 3);
 }
 
-// test_cannot_commit_without_new_term_entry tests the entries cannot be committed
-// when leader changes, no new proposal comes in and ChangeTerm proposal is
-// filtered.
+// test_cannot_commit_without_new_term_entry tests the entries cannot be
+// committed when leader changes, no new proposal comes in and ChangeTerm
+// proposal is filtered.
 #[test]
 fn test_cannot_commit_without_new_term_entry() {
     let l = default_logger();
@@ -1049,7 +1059,8 @@ fn test_old_messages() {
     tt.send(vec![new_message(1, 1, MessageType::MsgHup, 0)]);
     tt.send(vec![new_message(2, 2, MessageType::MsgHup, 0)]);
     tt.send(vec![new_message(1, 1, MessageType::MsgHup, 0)]);
-    // pretend we're an old leader trying to make progress; this entry is expected to be ignored.
+    // pretend we're an old leader trying to make progress; this entry is expected
+    // to be ignored.
     let mut m = new_message(2, 1, MessageType::MsgAppend, 0);
     m.term = 2;
     m.entries = vec![empty_entry(2, 3)].into();
@@ -1272,11 +1283,13 @@ fn test_pass_election_timeout() {
 }
 
 // test_handle_msg_append ensures:
-// 1. Reply false if log doesn’t contain an entry at prevLogIndex whose term matches prevLogTerm.
-// 2. If an existing entry conflicts with a new one (same index but different terms),
-//    delete the existing entry and all that follow it; append any new entries not already in the
-//    log.
-// 3. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index of last new entry).
+// 1. Reply false if log doesn’t contain an entry at prevLogIndex whose term
+//    matches prevLogTerm.
+// 2. If an existing entry conflicts with a new one (same index but different
+//    terms), delete the existing entry and all that follow it; append any new
+//    entries not already in the log.
+// 3. If leaderCommit > commitIndex, set commitIndex = min(leaderCommit, index
+//    of last new entry).
 #[test]
 fn test_handle_msg_append() {
     let l = default_logger();
@@ -1347,7 +1360,8 @@ fn test_handle_msg_append() {
     }
 }
 
-// test_handle_heartbeat ensures that the follower commits to the commit in the message.
+// test_handle_heartbeat ensures that the follower commits to the commit in the
+// message.
 #[test]
 fn test_handle_heartbeat() {
     let l = default_logger();
@@ -1393,7 +1407,8 @@ fn test_handle_heartbeat() {
     }
 }
 
-// test_handle_heartbeat_resp ensures that we re-send log entries when we get a heartbeat response.
+// test_handle_heartbeat_resp ensures that we re-send log entries when we get a
+// heartbeat response.
 #[test]
 fn test_handle_heartbeat_resp() {
     let l = default_logger();
@@ -1478,8 +1493,8 @@ fn test_raft_frees_read_only_mem() {
     assert!(!sm.read_only.pending_read_index.contains_key(&vec_ctx));
 }
 
-// test_msg_append_response_wait_reset verifies the waitReset behavior of a leader
-// MsgAppResp.
+// test_msg_append_response_wait_reset verifies the waitReset behavior of a
+// leader MsgAppResp.
 #[test]
 fn test_msg_append_response_wait_reset() {
     let l = default_logger();
@@ -1508,7 +1523,8 @@ fn test_msg_append_response_wait_reset() {
     sm.persist();
 
     // The command is broadcast to all nodes not in the wait state.
-    // Node 2 left the wait state due to its MsgAppResp, but node 3 is still waiting.
+    // Node 2 left the wait state due to its MsgAppResp, but node 3 is still
+    // waiting.
     let mut msgs = sm.read_messages();
     assert_eq!(msgs.len(), 1);
     assert_eq!(msgs[0].get_msg_type(), MessageType::MsgAppend);
@@ -1918,7 +1934,8 @@ fn test_leader_superseding_with_check_quorum() {
 
     nt.send(vec![new_message(3, 3, MessageType::MsgHup, 0)]);
 
-    // Peer b rejected c's vote since its electionElapsed had not reached to electionTimeout
+    // Peer b rejected c's vote since its electionElapsed had not reached to
+    // electionTimeout
     assert_eq!(nt.peers[&3].state, StateRole::Candidate);
 
     // Letting b's electionElapsed reach to electionTimeout
@@ -1964,7 +1981,8 @@ fn test_leader_election_with_check_quorum() {
     assert_eq!(nt.peers[&3].state, StateRole::Follower);
 
     // need to reset randomizedElectionTimeout larger than electionTimeout again,
-    // because the value might be reset to electionTimeout since the last state changes
+    // because the value might be reset to electionTimeout since the last state
+    // changes
     let a_election_timeout = nt.peers[&1].election_timeout();
     let b_election_timeout = nt.peers[&2].election_timeout();
     nt.peers
@@ -1988,9 +2006,10 @@ fn test_leader_election_with_check_quorum() {
     assert_eq!(nt.peers[&3].state, StateRole::Leader);
 }
 
-// test_free_stuck_candidate_with_check_quorum ensures that a candidate with a higher term
-// can disrupt the leader even if the leader still "officially" holds the lease, The
-// leader is expected to step down and adopt the candidate's term
+// test_free_stuck_candidate_with_check_quorum ensures that a candidate with a
+// higher term can disrupt the leader even if the leader still "officially"
+// holds the lease, The leader is expected to step down and adopt the
+// candidate's term
 #[test]
 fn test_free_stuck_candidate_with_check_quorum() {
     let l = default_logger();
@@ -2284,14 +2303,16 @@ fn test_read_only_option_safe() {
             vec![new_entry(0, 0, Some(wctx[1]))],
         );
 
-        // `pending` indicates that a `ReadIndex` request will not get through quorum checking immediately
-        // so that it remains in the `read_index_queue`
+        // `pending` indicates that a `ReadIndex` request will not get through quorum
+        // checking immediately so that it remains in the `read_index_queue`
         if pending {
-            // drop MsgHeartbeatResponse here to prevent leader handling pending ReadIndex request per round
+            // drop MsgHeartbeatResponse here to prevent leader handling pending ReadIndex
+            // request per round
             nt.ignore(MessageType::MsgHeartbeatResponse);
             nt.send(vec![msg1.clone(), msg1.clone(), msg2.clone()]);
             nt.recover();
-            // send a ReadIndex request with the last ctx to notify leader to handle pending read requests
+            // send a ReadIndex request with the last ctx to notify leader to handle pending
+            // read requests
             nt.send(vec![msg2.clone()]);
         } else {
             nt.send(vec![msg1.clone(), msg1.clone(), msg2.clone()]);
@@ -2502,8 +2523,8 @@ fn test_read_only_option_lease_without_check_quorum() {
     assert_eq!(rs.request_ctx, vec_ctx);
 }
 
-// `test_read_only_for_new_leader` ensures that a leader only accepts MsgReadIndex message
-// when it commits at least one log entry at it term.
+// `test_read_only_for_new_leader` ensures that a leader only accepts
+// MsgReadIndex message when it commits at least one log entry at it term.
 #[test]
 fn test_read_only_for_new_leader() {
     let l = default_logger();
@@ -2582,8 +2603,8 @@ fn test_read_only_for_new_leader() {
     assert_eq!(rs.request_ctx, wctx.as_bytes().to_vec());
 }
 
-// `test_advance_commit_index_by_read_index_response` ensures that read index response
-// can advance the follower's commit index if it has new enough logs
+// `test_advance_commit_index_by_read_index_response` ensures that read index
+// response can advance the follower's commit index if it has new enough logs
 #[test]
 fn test_advance_commit_index_by_read_index_response() {
     let l = default_logger();
@@ -2606,7 +2627,8 @@ fn test_advance_commit_index_by_read_index_response() {
     assert_eq!(tt.peers[&2].raft_log.committed, 1);
 
     tt.recover();
-    // use LeaseBased so leader won't send MsgHeartbeat to advance node 2's commit index
+    // use LeaseBased so leader won't send MsgHeartbeat to advance node 2's commit
+    // index
     tt.peers.get_mut(&1).unwrap().read_only.option = ReadOnlyOption::LeaseBased;
     tt.send(vec![new_message(2, 1, MessageType::MsgReadIndex, 1)]);
     assert_eq!(tt.peers[&2].raft_log.committed, 3);
@@ -2983,7 +3005,8 @@ fn test_restore_ignore_snapshot() {
 #[test]
 fn test_provide_snap() {
     let l = default_logger();
-    // restore the state machine from a snapshot so it has a compacted log and a snapshot
+    // restore the state machine from a snapshot so it has a compacted log and a
+    // snapshot
     let s = new_snapshot(11, 11, vec![1, 2]); // magic number
 
     let mut sm = new_test_raft(1, vec![1], 10, 1, new_storage(), &l);
@@ -3008,7 +3031,8 @@ fn test_provide_snap() {
 #[test]
 fn test_ignore_providing_snapshot() {
     let l = default_logger();
-    // restore the state machine from a snapshot so it has a compacted log and a snapshot
+    // restore the state machine from a snapshot so it has a compacted log and a
+    // snapshot
     let s = new_snapshot(11, 11, vec![1, 2]); // magic number
     let mut sm = new_test_raft(1, vec![1], 10, 1, new_storage(), &l);
     sm.restore(s);
@@ -3066,7 +3090,8 @@ fn test_slow_node_restore() {
 
     nt.recover();
     // send heartbeats so that the leader can learn everyone is active.
-    // node 3 will only be considered as active when node 1 receives a reply from it.
+    // node 3 will only be considered as active when node 1 receives a reply from
+    // it.
     loop {
         nt.send(vec![new_message(1, 1, MessageType::MsgBeat, 0)]);
         if nt.peers[&1].prs().get(3).unwrap().recent_active {
@@ -3135,8 +3160,8 @@ fn test_step_ignore_config() {
     assert_eq!(r.pending_conf_index, pending_conf_index);
 }
 
-// test_new_leader_pending_config tests that new leader sets its pending_conf_index
-// based on uncommitted entries.
+// test_new_leader_pending_config tests that new leader sets its
+// pending_conf_index based on uncommitted entries.
 #[test]
 fn test_new_leader_pending_config() {
     let l = default_logger();
@@ -3368,11 +3393,11 @@ fn test_leader_transfer_to_uptodate_node() {
     check_leader_transfer_state(&nt.peers[&1], StateRole::Leader, 1);
 }
 
-// test_leader_transfer_to_uptodate_node_from_follower verifies transferring should succeed
-// if the transferee has the most up-to-date log entries when transfer starts.
-// Not like test_leader_transfer_to_uptodate_node, where the leader transfer message
-// is sent to the leader, in this test case every leader transfer message is sent
-// to the follower.
+// test_leader_transfer_to_uptodate_node_from_follower verifies transferring
+// should succeed if the transferee has the most up-to-date log entries when
+// transfer starts. Not like test_leader_transfer_to_uptodate_node, where the
+// leader transfer message is sent to the leader, in this test case every leader
+// transfer message is sent to the follower.
 #[test]
 fn test_leader_transfer_to_uptodate_node_from_follower() {
     let l = default_logger();
@@ -3411,7 +3436,8 @@ fn test_leader_transfer_with_check_quorum() {
         .unwrap()
         .set_randomized_election_timeout(b_election_timeout + 1);
 
-    // Letting peer 2 electionElapsed reach to timeout so that it can vote for peer 1
+    // Letting peer 2 electionElapsed reach to timeout so that it can vote for peer
+    // 1
     for _ in 0..b_election_timeout {
         nt.peers.get_mut(&2).unwrap().tick();
     }
@@ -3555,7 +3581,8 @@ fn test_leader_transfer_ignore_proposal() {
 
     nt.isolate(3);
 
-    // Transfer leadership to isolated node to let transfer pending, then send proposal.
+    // Transfer leadership to isolated node to let transfer pending, then send
+    // proposal.
     nt.send(vec![new_message(3, 1, MessageType::MsgTransferLeader, 0)]);
     assert_eq!(nt.peers[&1].lead_transferee.unwrap(), 3);
 
@@ -3635,8 +3662,8 @@ fn test_leader_transfer_back() {
     check_leader_transfer_state(&nt.peers[&1], StateRole::Leader, 1);
 }
 
-// test_leader_transfer_second_transfer_to_another_node verifies leader can transfer to another node
-// when last transfer is pending.
+// test_leader_transfer_second_transfer_to_another_node verifies leader can
+// transfer to another node when last transfer is pending.
 #[test]
 fn test_leader_transfer_second_transfer_to_another_node() {
     let l = default_logger();
@@ -3654,8 +3681,9 @@ fn test_leader_transfer_second_transfer_to_another_node() {
     check_leader_transfer_state(&nt.peers[&1], StateRole::Follower, 2);
 }
 
-// test_leader_transfer_second_transfer_to_same_node verifies second transfer leader request
-// to the same node should not extend the timeout while the first one is pending.
+// test_leader_transfer_second_transfer_to_same_node verifies second transfer
+// leader request to the same node should not extend the timeout while the first
+// one is pending.
 #[test]
 fn test_leader_transfer_second_transfer_to_same_node() {
     let l = default_logger();
@@ -3894,7 +3922,8 @@ fn test_learner_promotion() -> Result<()> {
     Ok(())
 }
 
-// TestLearnerLogReplication tests that a learner can receive entries from the leader.
+// TestLearnerLogReplication tests that a learner can receive entries from the
+// leader.
 #[test]
 fn test_learner_log_replication() {
     let l = default_logger();
@@ -4025,8 +4054,8 @@ fn test_restore_learner() {
     assert!(!sm.promotable());
 }
 
-// TestRestoreLearnerPromotion checks that a learner can become to a follower after
-// restoring snapshot.
+// TestRestoreLearnerPromotion checks that a learner can become to a follower
+// after restoring snapshot.
 #[test]
 fn test_restore_learner_promotion() {
     let l = default_logger();
@@ -4037,7 +4066,8 @@ fn test_restore_learner_promotion() {
     assert!(sm.promotable());
 }
 
-// TestLearnerReceiveSnapshot tests that a learner can receive a snapshot from leader.
+// TestLearnerReceiveSnapshot tests that a learner can receive a snapshot from
+// leader.
 #[test]
 fn test_learner_receive_snapshot() {
     let l = default_logger();
@@ -4108,8 +4138,8 @@ fn test_remove_learner() -> Result<()> {
     Ok(())
 }
 
-// simulate rolling update a cluster for Pre-Vote. cluster has 3 nodes [n1, n2, n3].
-// n1 is leader with term 2
+// simulate rolling update a cluster for Pre-Vote. cluster has 3 nodes [n1, n2,
+// n3]. n1 is leader with term 2
 // n2 is follower with term 2
 // n3 is partitioned, with term 4 and less log, state is candidate
 fn new_prevote_migration_cluster(l: &Logger) -> Network {
@@ -4902,7 +4932,8 @@ fn test_follower_request_snapshot() {
     assert_eq!(nt.peers[&2].raft_log.committed, 17);
 }
 
-// Test if request snapshot can make progress when it meets SnapshotTemporarilyUnavailable.
+// Test if request snapshot can make progress when it meets
+// SnapshotTemporarilyUnavailable.
 #[test]
 fn test_request_snapshot_unavailable() {
     let (mut nt, s) = prepare_request_snapshot();
@@ -5352,7 +5383,14 @@ fn test_vote_log_freshness_takes_precedence_over_priority() {
             (6, 1000, 100, true),
         ] {
             let storage = MemStorage::new_with_conf_state((vec![1, 2, 3], vec![]));
-            storage.wl().append(&(1..=200).map(|index| empty_entry(7, index)).collect::<Vec<_>>()).unwrap();
+            storage
+                .wl()
+                .append(
+                    &(1..=200)
+                        .map(|index| empty_entry(7, index))
+                        .collect::<Vec<_>>(),
+                )
+                .unwrap();
             let mut voter = new_test_raft(1, vec![1, 2, 3], 10, 1, storage, &logger);
             voter.become_follower(9, INVALID_ID);
             voter.set_priority(0);
@@ -5388,7 +5426,14 @@ fn test_vote_log_freshness_takes_precedence_over_priority() {
 fn test_newer_low_priority_log_preserves_vote_fences() {
     let logger = default_logger();
     let storage = MemStorage::new_with_conf_state((vec![1, 2, 3], vec![]));
-    storage.wl().append(&(1..=200).map(|index| empty_entry(7, index)).collect::<Vec<_>>()).unwrap();
+    storage
+        .wl()
+        .append(
+            &(1..=200)
+                .map(|index| empty_entry(7, index))
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
     let mut voter = new_test_raft(1, vec![1, 2, 3], 10, 1, storage, &logger);
     voter.become_follower(9, INVALID_ID);
     voter.vote = 3;
@@ -5443,7 +5488,7 @@ fn test_election_after_change_priority() {
     assert_eq!(network.peers[&1].state, StateRole::Follower, "peer 1 state");
 
     let tests = [
-        (1, 1, StateRole::Follower), //id, priority, state
+        (1, 1, StateRole::Follower), // id, priority, state
         (1, 2, StateRole::Leader),
         (1, 3, StateRole::Leader),
         (1, 0, StateRole::Follower),
@@ -5463,8 +5508,8 @@ fn test_election_after_change_priority() {
     }
 }
 
-// `test_read_when_quorum_becomes_less` tests read requests could be handled earlier
-// if quorum becomes less in configuration changes.
+// `test_read_when_quorum_becomes_less` tests read requests could be handled
+// earlier if quorum becomes less in configuration changes.
 #[test]
 fn test_read_when_quorum_becomes_less() {
     let l = default_logger();
@@ -5649,7 +5694,8 @@ fn test_uncommitted_state_advance_ready_from_last_term() {
         .unwrap()
         .reduce_uncommitted_size(&[ent1, ent2]);
 
-    // uncommitted size should be 12(remain unchanged since there's only one uncommitted entries)
+    // uncommitted size should be 12(remain unchanged since there's only one
+    // uncommitted entries)
     assert_eq!(nt.peers.get_mut(&2).unwrap().uncommitted_size(), data.len());
 }
 
@@ -5992,6 +6038,7 @@ fn test_log_replication_with_reordered_message() {
     // now r1 receives the delayed resp2.
     let _ = r1.step(resp2);
     let m = expect_one_message(&mut r1);
-    // r1 shall re-send MsgApp from match index even if resp2's reject hint is less than matching index.
+    // r1 shall re-send MsgApp from match index even if resp2's reject hint is less
+    // than matching index.
     assert_eq!(r1.prs().get(2).unwrap().matched, m.index)
 }

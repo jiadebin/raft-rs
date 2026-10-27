@@ -14,33 +14,36 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cmp;
-use std::ops::{Deref, DerefMut};
-
-use crate::eraftpb::{
-    ConfChange, ConfChangeV2, ConfState, Entry, EntryType, HardState, Message, MessageType,
-    Snapshot,
+use std::{
+    cmp,
+    ops::{Deref, DerefMut},
 };
-use raft_proto::protocompat::*;
-use raft_proto::ConfChangeI;
-use rand::Rng;
-use slog::Logger;
 
 #[cfg(feature = "failpoints")]
 use fail::fail_point;
 use getset::Getters;
-use slog::{debug, error, info, o, trace, warn};
+use raft_proto::{ConfChangeI, protocompat::*};
+use rand::Rng;
+use slog::{Logger, debug, error, info, o, trace, warn};
 
-use super::errors::{Error, Result, StorageError};
-use super::raft_log::RaftLog;
-use super::read_only::{ReadOnly, ReadOnlyOption, ReadState};
-use super::storage::{GetEntriesContext, GetEntriesFor, Storage};
-use super::Config;
-use crate::confchange::Changer;
-use crate::quorum::VoteResult;
-use crate::util;
-use crate::util::NO_LIMIT;
-use crate::{confchange, Progress, ProgressState, ProgressTracker};
+use super::{
+    Config,
+    errors::{Error, Result, StorageError},
+    raft_log::RaftLog,
+    read_only::{ReadOnly, ReadOnlyOption, ReadState},
+    storage::{GetEntriesContext, GetEntriesFor, Storage},
+};
+use crate::{
+    Progress, ProgressState, ProgressTracker, confchange,
+    confchange::Changer,
+    eraftpb::{
+        ConfChange, ConfChangeV2, ConfState, Entry, EntryType, HardState, Message, MessageType,
+        Snapshot,
+    },
+    quorum::VoteResult,
+    util,
+    util::NO_LIMIT,
+};
 
 // CAMPAIGN_PRE_ELECTION represents the first phase of a normal election when
 // Config.pre_vote is true.
@@ -89,7 +92,8 @@ pub struct SoftState {
 /// log entries on 'leader' node
 struct UncommittedState {
     /// Specify maximum of uncommitted entry size.
-    /// When this limit is reached, all proposals to append new log will be dropped
+    /// When this limit is reached, all proposals to append new log will be
+    /// dropped
     max_uncommitted_size: usize,
 
     /// Record current uncommitted entries size.
@@ -193,7 +197,8 @@ pub struct RaftCore<T: Storage> {
 
     /// ID of the leader transfer target when its value is not None.
     ///
-    /// If this is Some(id), we follow the procedure defined in raft thesis 3.10.
+    /// If this is Some(id), we follow the procedure defined in raft thesis
+    /// 3.10.
     pub lead_transferee: Option<u64>,
 
     /// Only one conf change may be pending (in the log, but not yet
@@ -203,18 +208,19 @@ pub struct RaftCore<T: Storage> {
     /// be proposed if the leader's applied index is greater than this
     /// value.
     ///
-    /// This value is conservatively set in cases where there may be a configuration change pending,
-    /// but scanning the log is possibly expensive. This implies that the index stated here may not
-    /// necessarily be a config change entry, and it may not be a `BeginMembershipChange` entry, even if
-    /// we set this to one.
+    /// This value is conservatively set in cases where there may be a
+    /// configuration change pending, but scanning the log is possibly
+    /// expensive. This implies that the index stated here may not
+    /// necessarily be a config change entry, and it may not be a
+    /// `BeginMembershipChange` entry, even if we set this to one.
     pub pending_conf_index: u64,
 
     /// The queue of read-only requests.
     pub read_only: ReadOnly,
 
-    /// Ticks since it reached last electionTimeout when it is leader or candidate.
-    /// Number of ticks since it reached last electionTimeout or received a
-    /// valid message from current leader when it is a follower.
+    /// Ticks since it reached last electionTimeout when it is leader or
+    /// candidate. Number of ticks since it reached last electionTimeout or
+    /// received a valid message from current leader when it is a follower.
     pub election_elapsed: usize,
 
     /// Number of ticks since it reached last heartbeatTimeout.
@@ -226,9 +232,11 @@ pub struct RaftCore<T: Storage> {
 
     /// Enable the prevote algorithm.
     ///
-    /// This enables a pre-election vote round on Candidates prior to disrupting the cluster.
+    /// This enables a pre-election vote round on Candidates prior to disrupting
+    /// the cluster.
     ///
-    /// Enable this if greater cluster stability is preferred over faster elections.
+    /// Enable this if greater cluster stability is preferred over faster
+    /// elections.
     pub pre_vote: bool,
 
     skip_bcast_commit: bool,
@@ -258,8 +266,8 @@ pub struct RaftCore<T: Storage> {
     pub(crate) max_committed_size_per_ready: u64,
 }
 
-/// A struct that represents the raft consensus itself. Stores details concerning the current
-/// and possible state the system can take.
+/// A struct that represents the raft consensus itself. Stores details
+/// concerning the current and possible state the system can take.
 pub struct Raft<T: Storage> {
     prs: ProgressTracker,
 
@@ -526,10 +534,12 @@ impl<T: Storage> Raft<T> {
 
     /// Assigns groups to peers.
     ///
-    /// The tuple is (`peer_id`, `group_id`). `group_id` should be larger than 0.
+    /// The tuple is (`peer_id`, `group_id`). `group_id` should be larger than
+    /// 0.
     ///
     /// The group information is only stored in memory. So you need to configure
-    /// it every time a raft state machine is initialized or a snapshot is applied.
+    /// it every time a raft state machine is initialized or a snapshot is
+    /// applied.
     pub fn assign_commit_groups(&mut self, ids: &[(u64, u64)]) {
         let prs = self.mut_prs();
         for (peer_id, group_id) in ids {
@@ -603,7 +613,8 @@ impl<T: Storage> Raft<T> {
         self.check_quorum = check_quorum;
     }
 
-    /// Set the maximum limit that applied index can be ahead of persisted index.
+    /// Set the maximum limit that applied index can be ahead of persisted
+    /// index.
     pub fn set_max_apply_unpersisted_log_limit(&mut self, limit: u64) {
         self.raft_log.max_apply_unpersisted_log_limit = limit;
     }
@@ -630,16 +641,14 @@ impl<T: Storage> RaftCore<T> {
             if m.term == 0 {
                 // All {pre-,}campaign messages need to have the term set when
                 // sending.
-                // - MsgVote: m.Term is the term the node is campaigning for,
-                //   non-zero as we increment the term when campaigning.
-                // - MsgVoteResp: m.Term is the new r.Term if the MsgVote was
-                //   granted, non-zero for the same reason MsgVote is
-                // - MsgPreVote: m.Term is the term the node will campaign,
-                //   non-zero as we use m.Term to indicate the next term we'll be
-                //   campaigning for
-                // - MsgPreVoteResp: m.Term is the term received in the original
-                //   MsgPreVote if the pre-vote was granted, non-zero for the
-                //   same reasons MsgPreVote is
+                // - MsgVote: m.Term is the term the node is campaigning for, non-zero as we
+                //   increment the term when campaigning.
+                // - MsgVoteResp: m.Term is the new r.Term if the MsgVote was granted, non-zero
+                //   for the same reason MsgVote is
+                // - MsgPreVote: m.Term is the term the node will campaign, non-zero as we use
+                //   m.Term to indicate the next term we'll be campaigning for
+                // - MsgPreVoteResp: m.Term is the term received in the original MsgPreVote if
+                //   the pre-vote was granted, non-zero for the same reasons MsgPreVote is
                 fatal!(
                     self.logger,
                     "term should be set when sending {:?}",
@@ -774,8 +783,8 @@ impl<T: Storage> RaftCore<T> {
         is_batched
     }
 
-    /// Sends an append RPC with new entries (if any) and the current commit index to the given
-    /// peer.
+    /// Sends an append RPC with new entries (if any) and the current commit
+    /// index to the given peer.
     fn send_append(&mut self, to: u64, pr: &mut Progress, msgs: &mut Vec<Message>) {
         self.maybe_send_append(to, pr, true, msgs);
     }
@@ -887,8 +896,8 @@ impl<T: Storage> Raft<T> {
         total_size
     }
 
-    /// Sends an append RPC with new entries (if any) and the current commit index to the given
-    /// peer.
+    /// Sends an append RPC with new entries (if any) and the current commit
+    /// index to the given peer.
     pub fn send_append(&mut self, to: u64) {
         let pr = self.prs.get_mut(to).unwrap();
         self.r.send_append(to, pr, &mut self.msgs)
@@ -981,7 +990,8 @@ impl<T: Storage> Raft<T> {
             self.raft_log.applied_to_unchecked(applied);
         }
 
-        // TODO: it may never auto_leave if leader steps down before enter joint is applied.
+        // TODO: it may never auto_leave if leader steps down before enter joint is
+        // applied.
         if self.prs.conf().auto_leave
             && old_applied <= self.pending_conf_index
             && applied >= self.pending_conf_index
@@ -1086,7 +1096,8 @@ impl<T: Storage> Raft<T> {
         self.raft_log.maybe_persist_snap(index);
     }
 
-    /// Returns true to indicate that there will probably be some readiness need to be handled.
+    /// Returns true to indicate that there will probably be some readiness need
+    /// to be handled.
     pub fn tick(&mut self) -> bool {
         match self.state {
             StateRole::Follower | StateRole::PreCandidate | StateRole::Candidate => {
@@ -1099,7 +1110,8 @@ impl<T: Storage> Raft<T> {
     // TODO: revoke pub when there is a better way to test.
     /// Run by followers and candidates after self.election_timeout.
     ///
-    /// Returns true to indicate that there will probably be some readiness need to be handled.
+    /// Returns true to indicate that there will probably be some readiness need
+    /// to be handled.
     pub fn tick_election(&mut self) -> bool {
         self.election_elapsed += 1;
         if !self.pass_election_timeout() || !self.promotable {
@@ -1112,8 +1124,9 @@ impl<T: Storage> Raft<T> {
         true
     }
 
-    // tick_heartbeat is run by leaders to send a MsgBeat after self.heartbeat_timeout.
-    // Returns true to indicate that there will probably be some readiness need to be handled.
+    // tick_heartbeat is run by leaders to send a MsgBeat after
+    // self.heartbeat_timeout. Returns true to indicate that there will probably
+    // be some readiness need to be handled.
     fn tick_heartbeat(&mut self) -> bool {
         self.heartbeat_elapsed += 1;
         self.election_elapsed += 1;
@@ -1341,8 +1354,8 @@ impl<T: Storage> Raft<T> {
         );
     }
 
-    /// Steps the raft along via a message. This should be called everytime your raft receives a
-    /// message from a peer.
+    /// Steps the raft along via a message. This should be called everytime your
+    /// raft receives a message from a peer.
     pub fn step(&mut self, m: Message) -> Result<()> {
         // Handle the message term, which may result in our stepping down to a follower.
         if m.term == 0 {
@@ -1565,7 +1578,8 @@ impl<T: Storage> Raft<T> {
         if self.has_unapplied_conf_changes(low, high, ctx) {
             warn!(
                 self.logger,
-                "cannot campaign at term {} since there are still pending configuration changes to apply", self.term
+                "cannot campaign at term {} since there are still pending configuration changes to apply",
+                self.term
             );
             return;
         }
@@ -1726,14 +1740,13 @@ impl<T: Storage> Raft<T> {
             //   term (F)   1
             //   term (F)   1
             //
-            // 2. a follower becomes leader and appends entries at term 3.
-            //              -----------------
+            // 2. a follower becomes leader and appends entries at term 3. -----------------
             //   term (x)   1 2 2     [down]
             //   term (F)   1 3 3 3 3
             //   term (F)   1
             //
-            // 3. term 3 leader goes down, term 2 leader returns as term 4
-            //    leader. It commits the log & entries at term 4.
+            // 3. term 3 leader goes down, term 2 leader returns as term 4 leader. It
+            //    commits the log & entries at term 4.
             //
             //              -----------------
             //   term (L)   1 2 2 2
@@ -1744,10 +1757,9 @@ impl<T: Storage> Raft<T> {
             //   term (F)   1 3 3 3 3 [gets probed]
             //   term (F)   1 2 2 2 4 4 4
             //
-            // 4. the leader will now probe the returning follower at index
-            //    7, the rejection points it at the end of the follower's log
-            //    which is at a higher log term than the actually committed
-            //    log.
+            // 4. the leader will now probe the returning follower at index 7, the rejection
+            //    points it at the end of the follower's log which is at a higher log term
+            //    than the actually committed log.
             next_probe_index = self
                 .raft_log
                 .find_conflict_by_term(m.reject_hint, m.log_term)
@@ -1868,7 +1880,8 @@ impl<T: Storage> Raft<T> {
     }
 
     fn handle_heartbeat_response(&mut self, m: &Message) {
-        // Update the node. Drop the value explicitly since we'll check the qourum after.
+        // Update the node. Drop the value explicitly since we'll check the qourum
+        // after.
         let pr = match self.prs.get_mut(m.from) {
             Some(pr) => pr,
             None => {
@@ -2014,8 +2027,8 @@ impl<T: Storage> Raft<T> {
                 "progress" => ?pr,
             );
         }
-        // If snapshot finish, wait for the msgAppResp from the remote node before sending
-        // out the next msgAppend.
+        // If snapshot finish, wait for the msgAppResp from the remote node before
+        // sending out the next msgAppend.
         // If snapshot failure, wait for a heartbeat interval before next try
         pr.pause();
         pr.pending_request_snapshot = INVALID_INDEX;
@@ -2165,9 +2178,9 @@ impl<T: Storage> Raft<T> {
                     return Ok(());
                 }
 
-                // thinking: use an internally defined context instead of the user given context.
-                // We can express this in terms of the term and index instead of
-                // a user-supplied value.
+                // thinking: use an internally defined context instead of the user given
+                // context. We can express this in terms of the term and index
+                // instead of a user-supplied value.
                 // This would allow multiple reads to piggyback on the same message.
                 match self.read_only.option {
                     ReadOnlyOption::Safe => {
@@ -2233,8 +2246,15 @@ impl<T: Storage> Raft<T> {
         }
 
         let log = &mut self.r.raft_log;
-        info!(self.r.logger, "[commit: {}, lastindex: {}, lastterm: {}] fast-forwarded commit to vote request [index: {}, term: {}]",
-                log.committed, log.last_index(), log.last_term(), m.commit, m.commit_term);
+        info!(
+            self.r.logger,
+            "[commit: {}, lastindex: {}, lastterm: {}] fast-forwarded commit to vote request [index: {}, term: {}]",
+            log.committed,
+            log.last_index(),
+            log.last_term(),
+            m.commit,
+            m.commit_term
+        );
 
         if self.state != StateRole::Candidate && self.state != StateRole::PreCandidate {
             return;
@@ -2290,8 +2310,8 @@ impl<T: Storage> Raft<T> {
         res
     }
 
-    // step_candidate is shared by state Candidate and PreCandidate; the difference is
-    // whether they respond to MsgRequestVote or MsgRequestPreVote.
+    // step_candidate is shared by state Candidate and PreCandidate; the difference
+    // is whether they respond to MsgRequestVote or MsgRequestPreVote.
     fn step_candidate(&mut self, m: Message) -> Result<()> {
         match m.get_msg_type() {
             MessageType::MsgPropose => {
@@ -2447,9 +2467,10 @@ impl<T: Storage> Raft<T> {
                     request_ctx: m.take_entries()[0].take_data().to_vec(),
                 };
                 self.read_states.push(rs);
-                // `index` and `term` in MsgReadIndexResp is the leader's commit index and its current term,
-                // the log entry in the leader's commit index will always have the leader's current term,
-                // because the leader only handle MsgReadIndex after it has committed log entry in its term.
+                // `index` and `term` in MsgReadIndexResp is the leader's commit index and its
+                // current term, the log entry in the leader's commit index will
+                // always have the leader's current term, because the leader
+                // only handle MsgReadIndex after it has committed log entry in its term.
                 self.raft_log.maybe_commit(m.index, m.term);
             }
             _ => {}
@@ -2713,8 +2734,9 @@ impl<T: Storage> Raft<T> {
         true
     }
 
-    /// Updates the in-memory state and, when necessary, carries out additional actions
-    /// such as reacting to the removal of nodes or changed quorum requirements.
+    /// Updates the in-memory state and, when necessary, carries out additional
+    /// actions such as reacting to the removal of nodes or changed quorum
+    /// requirements.
     pub fn post_conf_change(&mut self) -> ConfState {
         info!(self.logger, "switched to configuration"; "config" => ?self.prs.conf());
         // TODO: instead of creating a conf state, validating conf state inside
@@ -2938,8 +2960,9 @@ impl<T: Storage> Raft<T> {
     }
 
     /// Increase size of 'ents' to uncommitted size. Return true when size limit
-    /// is satisfied. Otherwise return false and uncommitted size remains unchanged.
-    /// For raft with no limit(or non-leader raft), it always return true.
+    /// is satisfied. Otherwise return false and uncommitted size remains
+    /// unchanged. For raft with no limit(or non-leader raft), it always
+    /// return true.
     #[inline]
     pub fn maybe_increase_uncommitted_size(&mut self, ents: &[Entry]) -> bool {
         self.uncommitted_state.maybe_increase_uncommitted_size(ents)
@@ -2951,9 +2974,10 @@ impl<T: Storage> Raft<T> {
         self.uncommitted_state.uncommitted_size
     }
 
-    /// A Raft leader allocates a vector with capacity `max_inflight_msgs` for every peer.
-    /// It takes a lot of memory if there are too many Raft groups. `maybe_free_inflight_buffers`
-    /// is used to free memory if necessary.
+    /// A Raft leader allocates a vector with capacity `max_inflight_msgs` for
+    /// every peer. It takes a lot of memory if there are too many Raft
+    /// groups. `maybe_free_inflight_buffers` is used to free memory if
+    /// necessary.
     pub fn maybe_free_inflight_buffers(&mut self) {
         for (_, pr) in self.mut_prs().iter_mut() {
             pr.ins.maybe_free_buffer();
