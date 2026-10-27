@@ -18,8 +18,8 @@ fn test_unlimited_admission_still_tracks_and_releases_uncommitted_bytes() {
     };
     let first = entry(6, 12);
     let second = entry(7, 20);
-    assert!(state.maybe_increase_uncommitted_size(&[first.clone()]));
-    assert!(state.maybe_increase_uncommitted_size(&[second.clone()]));
+    assert!(state.maybe_increase_uncommitted_size(std::slice::from_ref(&first)));
+    assert!(state.maybe_increase_uncommitted_size(std::slice::from_ref(&second)));
     assert_eq!(state.uncommitted_size, 32);
     assert!(state.maybe_increase_uncommitted_size(&[entry(8, 0)]));
     assert_eq!(state.uncommitted_size, 32);
@@ -37,7 +37,7 @@ fn test_finite_admission_keeps_single_large_entry_and_empty_entry_rules() {
         last_log_tail_index: 5,
     };
     let first = entry(6, 20);
-    assert!(state.maybe_increase_uncommitted_size(&[first.clone()]));
+    assert!(state.maybe_increase_uncommitted_size(std::slice::from_ref(&first)));
     assert!(!state.maybe_increase_uncommitted_size(&[entry(7, 1)]));
     assert!(state.maybe_increase_uncommitted_size(&[entry(7, 0)]));
     assert_eq!(state.uncommitted_size, 20);
@@ -55,7 +55,7 @@ fn test_unlimited_commit_ignores_inherited_tail_and_never_wraps() {
         last_log_tail_index: 5,
     };
     let current = entry(6, 12);
-    assert!(state.maybe_increase_uncommitted_size(&[current.clone()]));
+    assert!(state.maybe_increase_uncommitted_size(std::slice::from_ref(&current)));
     assert!(state.maybe_reduce_uncommitted_size(&[entry(4, 1000), entry(5, 1000)]));
     assert_eq!(state.uncommitted_size, 12);
     assert!(state.maybe_reduce_uncommitted_size(&[entry(5, 1000), current]));
