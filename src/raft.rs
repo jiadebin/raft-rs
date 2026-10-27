@@ -1492,7 +1492,11 @@ impl<T: Storage> Raft<T> {
                 // ...and we believe the candidate is up to date.
                 if can_vote
                     && self.raft_log.is_up_to_date(m.index, m.log_term)
-                    && (m.index > self.raft_log.last_index() || self.priority <= get_priority(&m))
+                    // Priority only breaks ties between equally up-to-date logs.
+                    // A higher last term is newer even when the index is smaller.
+                    && (m.log_term > self.raft_log.last_term()
+                        || m.index > self.raft_log.last_index()
+                        || self.priority <= get_priority(&m))
                 {
                     // When responding to Msg{Pre,}Vote messages we include the term
                     // from the message, not the local term. To see why consider the
